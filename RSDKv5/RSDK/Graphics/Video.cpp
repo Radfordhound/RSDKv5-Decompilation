@@ -9,17 +9,22 @@ ogg_page VideoManager::og;
 ogg_packet VideoManager::op;
 ogg_stream_state VideoManager::vo;
 ogg_stream_state VideoManager::to;
+#if RETRO_PLATFORM != RETRO_WIIU // TODO
 th_info VideoManager::ti;
 th_comment VideoManager::tc;
 th_dec_ctx *VideoManager::td    = NULL;
 th_setup_info *VideoManager::ts = NULL;
 
 th_pixel_fmt VideoManager::pixelFormat;
+#endif
 ogg_int64_t VideoManager::granulePos = 0;
 bool32 VideoManager::initializing    = false;
 
 bool32 RSDK::LoadVideo(const char *filename, double startDelay, bool32 (*skipCallback)())
 {
+#if RETRO_PLATFORM == RETRO_WIIU // TODO
+    return false;
+#else
     if (ENGINE_VERSION == 5 && sceneInfo.state == ENGINESTATE_VIDEOPLAYBACK)
         return false;
 #if RETRO_REV0U
@@ -191,10 +196,12 @@ bool32 RSDK::LoadVideo(const char *filename, double startDelay, bool32 (*skipCal
     }
 
     return false;
+#endif
 }
 
 void RSDK::ProcessVideo()
 {
+#if RETRO_PLATFORM != RETRO_WIIU // TODO
     bool32 finished = false;
     double curTime  = 0;
     if (!VideoManager::initializing) {
@@ -283,4 +290,5 @@ void RSDK::ProcessVideo()
             RSDK::Legacy::gameMode = engine.storedState;
 #endif
     }
+#endif
 }

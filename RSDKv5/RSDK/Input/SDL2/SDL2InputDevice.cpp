@@ -212,6 +212,9 @@ RSDK::SKU::InputDeviceSDL *RSDK::SKU::InitSDL2InputDevice(uint32 id, uint8 contr
         controllerType   = DEVICE_SWITCH_PRO;
         device->swapABXY = true;
     }
+    else if (strstr(name, "Wii U Gamepad")) {
+        controllerType = DEVICE_SWITCH_PRO; // TODO: Custom device type.
+    }
     else if (strstr(name, "Saturn"))
         controllerType = DEVICE_SATURN;
 

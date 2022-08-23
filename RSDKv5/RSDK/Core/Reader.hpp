@@ -1,7 +1,26 @@
 #ifndef READER_H
 #define READER_H
 
-#if RETRO_RENDERDEVICE_SDL2 || RETRO_AUDIODEVICE_SDL2 || RETRO_INPUTDEVICE_SDL2
+#if RETRO_PLATFORM == RETRO_WIIU
+struct FileIO
+{
+    unsigned int handle;
+    uint32_t pos;
+    uint32_t size;
+};
+
+bool WiiUInitFileSystem();
+const char* WiiUGetBasePath();
+void WiiUShutdownFileSystem();
+
+FileIO* fOpen(const char* path, const char* mode);
+size_t fRead(void* ptr, size_t size, size_t count, FileIO *file);
+int fSeek(FileIO *file, long offset, int origin);
+long fTell(FileIO *file);
+void fClose(FileIO *file);
+size_t fWrite(const void* ptr, size_t size, size_t count, FileIO *file);
+
+#elif RETRO_RENDERDEVICE_SDL2 || RETRO_AUDIODEVICE_SDL2 || RETRO_INPUTDEVICE_SDL2
 #define FileIO                                          SDL_RWops
 #define fOpen(path, mode)                               SDL_RWFromFile(path, mode)
 #define fRead(buffer, elementSize, elementCount, file)  SDL_RWread(file, buffer, elementSize, elementCount)
@@ -186,6 +205,9 @@ inline size_t ReadBytes(FileInfo *info, void *data, int32 count)
 
 inline uint8 ReadInt8(FileInfo *info)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+        alignas(64)
+#endif
     int8 result      = 0;
     size_t bytesRead = 0;
 
@@ -209,6 +231,9 @@ inline uint8 ReadInt8(FileInfo *info)
 
 inline int16 ReadInt16(FileInfo *info)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+        alignas(64)
+#endif
     union {
         uint16 result;
         uint8 b[sizeof(result)];
@@ -253,6 +278,9 @@ inline int16 ReadInt16(FileInfo *info)
 
 inline int32 ReadInt32(FileInfo *info, bool32 swapEndian)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+        alignas(64)
+#endif
     union {
         uint32 result;
         uint8 b[sizeof(result)];
@@ -309,6 +337,9 @@ inline int32 ReadInt32(FileInfo *info, bool32 swapEndian)
 }
 inline int64 ReadInt64(FileInfo *info)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+        alignas(64)
+#endif
     union {
         uint64 result;
         uint8 b[sizeof(result)];
@@ -353,6 +384,9 @@ inline int64 ReadInt64(FileInfo *info)
 
 inline float ReadSingle(FileInfo *info)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+        alignas(64)
+#endif
     union {
         float result;
         uint8 b[sizeof(result)];

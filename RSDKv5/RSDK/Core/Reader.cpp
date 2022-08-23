@@ -12,7 +12,263 @@ char RSDK::gameLogicName[0x200];
 
 bool32 RSDK::useDataPack = false;
 
-#if RETRO_PLATFORM == RETRO_ANDROID
+#if RETRO_PLATFORM == RETRO_WIIU
+#include <coreinit/filesystem.h>
+#include <coreinit/memdefaultheap.h>
+#include <whb/log.h>
+
+static FSClient sClient;
+static FSCmdBlock sCmd;
+static FSMountSource sMountSource;
+static char sBasePath[128] = { '\0' };
+
+bool WiiUInitFileSystem()
+{
+    // Initialize filesystem.
+    FSInit();
+    FSInitCmdBlock(&sCmd);
+    WHBLogPrint("file system initialized");
+    
+    // Add filesystem client.
+    FSStatus result = FSAddClient(&sClient, FS_ERROR_FLAG_ALL);
+    if (result != FS_STATUS_OK)
+    {
+        WHBLogPrintf("Failed to add filesystem client!"
+            " FSAddClient: %d", result);
+        return false;
+    }
+
+    WHBLogPrint("file system client added");
+
+    // Mount SD card.
+    result = FSGetMountSource(&sClient, &sCmd,
+        FS_MOUNT_SOURCE_SD, &sMountSource, FS_ERROR_FLAG_ALL);
+
+    if (result != FS_STATUS_OK)
+    {
+        WHBLogPrintf("Failed to get SD card mount source!"
+            " FSGetMountSource: %d", result);
+        return false;
+    }
+
+    result = FSMount(&sClient, &sCmd, &sMountSource,
+        sBasePath, sizeof(sBasePath), FS_ERROR_FLAG_ALL);
+
+    if (result != FS_STATUS_OK)
+    {
+        WHBLogPrintf("Failed to mount SD card!"
+            " FSMount: %d", result);
+        return false;
+    }
+
+    // Append forward slash to the end of the mount path.
+    const size_t endPos = strlen(sBasePath);
+    strcpy(sBasePath + endPos, "/wiiu/apps/SonicMania/");
+    WHBLogPrintf("mounted sd card! \"%s\"", sBasePath);
+    return true;
+}
+
+const char* WiiUGetBasePath()
+{
+    return sBasePath;
+}
+
+void WiiUShutdownFileSystem()
+{
+    FSDelClient(&sClient, FS_ERROR_FLAG_ALL);
+    FSShutdown();
+}
+
+FileIO *fOpen(const char* path, const char* mode)
+{
+    WHBLogPrintf("fOpen(path: \"%s\", mode: \"%s\")", path, mode);
+    
+    // Get a mode that is compatible with FSOpenFile.
+    if (mode[0] == 'r')
+    {
+        mode = "r";
+    }
+    else if (mode[0] == 'w')
+    {
+        mode = "w";
+    }
+
+    // Allocate file structure.
+    FileIO *file = new FileIO();
+    if (!file) return nullptr;
+
+    // Open file handle.
+    FSStatus result = FSOpenFile(&sClient, &sCmd,
+        path, mode, &file->handle, FS_ERROR_FLAG_ALL);
+
+    if (result != FS_STATUS_OK)
+    {
+        delete file;
+        WHBLogPrintf("Failed to open a file!"
+            " FSOpenFile: %d", result);
+        return nullptr;
+    }
+
+    // Get file size.
+    FSStat stats;
+    result = FSGetStatFile(&sClient, &sCmd,
+        file->handle, &stats, FS_ERROR_FLAG_ALL);
+
+    if (result != FS_STATUS_OK)
+    {
+        FSCloseFile(&sClient, &sCmd,
+            file->handle, FS_ERROR_FLAG_ALL);
+
+        delete file;
+        WHBLogPrintf("Failed to get file stats!"
+            " FSGetStatFile: %d", result);
+
+        return nullptr;
+    }
+
+    // Setup file structure and return it.
+    file->pos = 0;
+    file->size = stats.size;
+    WHBLogPrintf("fOpen succeeded!");
+    return file;
+}
+
+size_t fRead(void* ptr, size_t size, size_t count, FileIO *file)
+{
+    WHBLogPrintf("fRead(ptr: %d, size: %d, count: %d, file: %d)", ptr, size, count, file->handle);
+
+    // Create aligned buffer if necessary.
+    alignas(64) char alignedStackBuf[128];
+    void* alignedBuf;
+    const bool memIsAligned = (((uintptr_t)ptr % 64) == 0);
+
+    if (!memIsAligned)
+    {
+        const size_t totalSize = (size * count);
+        alignedBuf = (totalSize > sizeof(alignedStackBuf)) ?
+            MEMAllocFromDefaultHeapEx(totalSize, 64) :
+            alignedStackBuf;
+    }
+    else
+    {
+        alignedBuf = ptr;
+    }
+
+    // Read data into memory.
+    FSStatus result = FSReadFile(&sClient, &sCmd, (uint8_t*)alignedBuf,
+        size, count, file->handle, 0, FS_ERROR_FLAG_ALL);
+
+    // Copy and free allocated memory if necessary.
+    if (!memIsAligned)
+    {
+        if (result > 0)
+        {
+            memcpy(ptr, alignedBuf, result);
+        }
+        
+        if (alignedBuf != alignedStackBuf)
+        {
+            MEMFreeToDefaultHeap(alignedBuf);
+        }
+    }
+
+    // Increase position if necessary and return result.
+    if (result < 0)
+    {
+        WHBLogPrintf("Failed to read from file!"
+            " FSReadFile: %d", result);
+        return 0;
+    }
+
+    file->pos += result;
+    return result;
+}
+
+int fSeek(FileIO *file, long offset, int origin)
+{
+    WHBLogPrintf("fSeek(file: %d, offset: %d, origin: %d)", file->handle, offset, origin);
+
+    switch (origin)
+    {
+    default:
+        return -1;
+
+    case SEEK_SET:
+        WHBLogPrint("SEEK_SET");
+        file->pos = offset;
+        break;
+
+    case SEEK_CUR:
+        WHBLogPrint("SEEK_CUR");
+        file->pos += offset;
+        break;
+
+    case SEEK_END:
+        WHBLogPrint("SEEK_END");
+        file->pos = (file->size + offset);
+        break;
+    }
+
+    WHBLogPrintf("final fSeek pos: %d", file->pos);
+    return FSSetPosFile(&sClient, &sCmd, file->handle,
+        file->pos, FS_ERROR_FLAG_ALL);
+}
+
+long fTell(FileIO *file)
+{
+    WHBLogPrintf("fTell(file: %d)", file->handle);
+    WHBLogPrintf("fTell result: %d", file->pos);
+    return (long)file->pos;
+}
+
+void fClose(FileIO *file)
+{
+    WHBLogPrintf("fClose(file: %d)", file->handle);
+    FSCloseFile(&sClient, &sCmd, file->handle, FS_ERROR_FLAG_ALL);
+    delete file;
+}
+
+size_t fWrite(const void* ptr, size_t size, size_t count, FileIO *file)
+{
+    WHBLogPrintf("fWrite(ptr: %d, size: %d, count: %d, file: %d)", ptr, size, count, file->handle);
+
+    // Create aligned buffer if necessary.
+    alignas(64) char alignedStackBuf[128];
+    const bool memIsAligned = (((uintptr_t)ptr % 64) == 0);
+
+    if (!memIsAligned)
+    {
+        const size_t totalSize = (size * count);
+        void* alignedBuf = (totalSize > sizeof(alignedStackBuf)) ?
+            MEMAllocFromDefaultHeapEx(size * count, 64) :
+            alignedStackBuf;
+
+        memcpy(alignedBuf, ptr, totalSize);
+        ptr = alignedBuf;
+    }
+
+    // Write data to file.
+    FSStatus result = FSWriteFile(&sClient, &sCmd, (uint8_t*)ptr,
+        size, count, file->handle, 0, FS_ERROR_FLAG_ALL);
+
+    // Free allocated memory if necessary.
+    if (!memIsAligned && ptr != alignedStackBuf)
+    {
+        MEMFreeToDefaultHeap((void*)ptr);
+    }
+
+    // Increase position if necessary and return result.
+    if (result < 0)
+    {
+        WHBLogPrintf("Failed to write to file!"
+            " FSWriteFile: %d", result);
+        return 0;
+    }
+
+    file->pos += result;
+    return result;
+}
+#elif RETRO_PLATFORM == RETRO_ANDROID
 FileIO *fOpen(const char *path, const char *mode)
 {
     char buffer[0x200];
@@ -186,6 +442,10 @@ inline bool ends_with(std::string const &value, std::string const &ending)
 
 bool32 RSDK::OpenDataFile(FileInfo *info, const char *filename)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+    WHBLogPrintf("OpenDataFile: \"%s\"", filename);
+#endif
+
     char hashBuffer[0x400];
     StringLowerCase(hashBuffer, filename);
     RETRO_HASH_MD5(hash);
@@ -245,6 +505,10 @@ bool32 RSDK::OpenDataFile(FileInfo *info, const char *filename)
 
 bool32 RSDK::LoadFile(FileInfo *info, const char *filename, uint8 fileMode)
 {
+#if RETRO_PLATFORM == RETRO_WIIU
+    WHBLogPrintf("LoadFile: \"%s\"", filename);
+#endif
+    
     if (info->file)
         return false;
 

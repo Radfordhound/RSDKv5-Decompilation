@@ -1,3 +1,6 @@
+#if __WIIU__
+#include <whb/log.h>
+#endif
 
 SDL_Window *RenderDevice::window     = nullptr;
 SDL_Renderer *RenderDevice::renderer = nullptr;
@@ -42,6 +45,11 @@ bool RenderDevice::Init()
     videoSettings.windowed     = false;
     videoSettings.windowWidth  = 1920;
     videoSettings.windowHeight = 1080;
+    flags |= SDL_WINDOW_FULLSCREEN;
+#elif RETRO_PLATFORM == RETRO_WIIU
+    videoSettings.windowed     = false;
+    videoSettings.windowWidth  = 1280;
+    videoSettings.windowHeight = 720;
     flags |= SDL_WINDOW_FULLSCREEN;
 #endif
 

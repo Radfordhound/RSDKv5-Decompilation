@@ -1,6 +1,12 @@
 #include "RSDK/Core/RetroEngine.hpp"
 #include "main.hpp"
 
+#ifdef __WIIU__
+#include <whb/log.h>
+#include <whb/log_cafe.h>
+#include <whb/log_udp.h>
+#endif
+
 #ifdef __SWITCH__
 #include <switch.h>
 #include <stdlib.h>
@@ -88,12 +94,30 @@ int32 RSDK_main(int32 argc, char **argv, void *linkLogicPtr)
     // initNxLink();
 #endif
 
+#ifdef __WIIU__
+    // Initialize log.
+    WHBLogCafeInit();
+    WHBLogUdpInit();
+
+    // Initialize file system.
+    WiiUInitFileSystem();
+#endif
+
     RSDK::linkGameLogic = (RSDK::LogicLinkHandle)linkLogicPtr;
 
     int32 exitCode = RSDK::RunRetroEngine(argc, argv);
 
 #ifdef __SWITCH__
     // socketExit();
+#endif
+
+#ifdef __WIIU__
+    // Shutdown filesystem.
+    WiiUShutdownFileSystem();
+
+    // Shutdown log.
+    WHBLogUdpDeinit();
+    WHBLogCafeDeinit();
 #endif
 
     return exitCode;
