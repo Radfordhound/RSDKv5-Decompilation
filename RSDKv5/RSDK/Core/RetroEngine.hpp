@@ -73,6 +73,10 @@ enum GameRegions {
 #define RETRO_STANDALONE (1)
 #endif
 
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#define RETRO_BIG_ENDIAN (1)
+#endif
+
 // ============================
 // PLATFORMS
 // ============================

@@ -95,12 +95,27 @@ unsigned *md5(unsigned *h, const char *msg, int32 mlen)
             //            unsigned char t;
             WBunion u;
             u.w = 8 * mlen;
+#if RETRO_BIG_ENDIAN
+            u.w = __builtin_bswap32(u.w);
+#endif
             //            t = u.b[0]; u.b[0] = u.b[3]; u.b[3] = t;
             //            t = u.b[1]; u.b[1] = u.b[2]; u.b[2] = t;
             q -= 8;
             memcpy(msg2 + q, &u.w, 4);
         }
     }
+
+#if RETRO_BIG_ENDIAN
+    // Swap endianness of input in 4-byte increments on big-endian platforms
+    // so that we get the same MD5 hash result despite the endianness difference.
+    uint32_t* curU32ToSwap = (uint32_t*)msg2;
+    for (grp = 0; grp < grps; grp++) {
+        for (q = 0; q < 16; q++) {
+            *curU32ToSwap = __builtin_bswap32(*curU32ToSwap);
+            ++curU32ToSwap;
+        }
+    }
+#endif
 
     for (grp = 0; grp < grps; grp++) {
         memcpy(mm.b, msg2 + os, 64);
@@ -390,6 +405,12 @@ void RSDK::LoadStringList(String *stringList, const char *filePath, uint32 charS
             InitStringList(stringList, (info.fileSize >> 1) - 1);
             ReadBytes(&info, stringList->chars, stringList->size * sizeof(uint16));
             stringList->length = stringList->size;
+
+#if RETRO_BIG_ENDIAN
+            for (int16 i = 0; i < stringList->size; ++i) {
+                stringList->chars[i] = __builtin_bswap16(stringList->chars[i]);
+            }
+#endif
         }
         else {
             // UTF-8

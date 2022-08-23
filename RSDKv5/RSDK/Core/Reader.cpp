@@ -340,10 +340,17 @@ void RSDK::GenerateELoadKeys(FileInfo *info, const char *key1, int32 key2)
     GEN_HASH_MD5_BUFFER(hashBuffer, (uint32 *)hash);
 
     for (int32 y = 0; y < 0x10; y += 4) {
+#if RETRO_BIG_ENDIAN
+        info->encryptionKeyA[y + 3] = hash[y + 3];
+        info->encryptionKeyA[y + 2] = hash[y + 2];
+        info->encryptionKeyA[y + 1] = hash[y + 1];
+        info->encryptionKeyA[y + 0] = hash[y + 0];
+#else
         info->encryptionKeyA[y + 3] = hash[y + 0];
         info->encryptionKeyA[y + 2] = hash[y + 1];
         info->encryptionKeyA[y + 1] = hash[y + 2];
         info->encryptionKeyA[y + 0] = hash[y + 3];
+#endif
     }
 
     // KeyB
@@ -351,10 +358,17 @@ void RSDK::GenerateELoadKeys(FileInfo *info, const char *key1, int32 key2)
     GEN_HASH_MD5_BUFFER(hashBuffer, (uint32 *)hash);
 
     for (int32 y = 0; y < 0x10; y += 4) {
+#if RETRO_BIG_ENDIAN
+        info->encryptionKeyB[y + 3] = hash[y + 3];
+        info->encryptionKeyB[y + 2] = hash[y + 2];
+        info->encryptionKeyB[y + 1] = hash[y + 1];
+        info->encryptionKeyB[y + 0] = hash[y + 0];
+#else
         info->encryptionKeyB[y + 3] = hash[y + 0];
         info->encryptionKeyB[y + 2] = hash[y + 1];
         info->encryptionKeyB[y + 1] = hash[y + 2];
         info->encryptionKeyB[y + 0] = hash[y + 3];
+#endif
     }
 }
 
